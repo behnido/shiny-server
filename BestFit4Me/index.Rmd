@@ -10,29 +10,9 @@ runtime: shiny
 
 ```{r global, include=FALSE}
 # load packages and active client data in 'global' chunk so it can be shared by all users of the dashboard
-##Install and Load CRAN/Devtool libraries 
-deepak <- function(pkg) {
-    new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
-    if (length(new.pkg))
-        install.packages(new.pkg, dependencies = TRUE, repos = "http://cran.us.r-project.org")
-    sapply(pkg, require, character.only = TRUE)
-}
-
-deepak2 <- function(pkg) {
-    new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
-    if (length(new.pkg))
-        install_github("rmarkdown", "kassambara/factoextra")
-        #install_github("kassambara/factoextra")
-    sapply(pkg, require, character.only = TRUE)
-}
-
-#Install packages once, uses ipak function
-packages2 <- c("devtools") 
 packages <- c("dplyr","ggplot2","flexdashboard","data.table","FactoMineR","factoextra", "tibble", "DT", "mltools", "rmarkdown") 
-
-deepak2(packages2)
-deepak(packages)
-rm(deepak,deepak2,packages,packages2)
+lapply(packages, library, character.only = TRUE)
+rm(packages)
 
 dataset <- read.csv("./data/franchiseProfilesbyGMs.csv", header = TRUE) %>% dplyr::select(-starts_with("X"))
 
