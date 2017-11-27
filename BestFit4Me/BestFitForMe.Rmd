@@ -1,0 +1,258 @@
+---
+title: "Best-Fit-For-Me Configurator"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    social: menu
+    source_code: embed
+runtime: shiny
+---
+
+```{r global, include=FALSE}
+# load packages and active client data in 'global' chunk so it can be shared by all users of the dashboard
+##Install and Load CRAN/Devtool libraries 
+deepak <- function(pkg) {
+    new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
+    if (length(new.pkg))
+        install.packages(new.pkg, dependencies = TRUE, repos = "http://cran.us.r-project.org")
+    sapply(pkg, require, character.only = TRUE)
+}
+
+deepak2 <- function(pkg) {
+    new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
+    if (length(new.pkg))
+        install_github("rmarkdown", "kassambara/factoextra")
+        #install_github("kassambara/factoextra")
+    sapply(pkg, require, character.only = TRUE)
+}
+
+#Install packages once, uses ipak function
+packages2 <- c("devtools") 
+packages <- c("dplyr","ggplot2","flexdashboard","data.table","FactoMineR","factoextra", "tibble", "DT", "mltools", "rmarkdown") 
+
+deepak2(packages2)
+deepak(packages)
+rm(deepak,deepak2,packages,packages2)
+
+dataset <- read.csv("./data/franchiseProfilesbyGMs.csv", header = TRUE) %>% dplyr::select(-starts_with("X"))
+
+#define Tanimoto helper function
+tanimoto <- function(x, similarity=F) {
+  res<-sapply(x, function(x1){
+    sapply(x, function(x2) {i=length(which(x1 & x2)) / length(which(x1 | x2)); ifelse(is.na(i), 0, i)})
+  })
+  if(similarity==T) return(res)
+  else return(1-res)
+}
+
+```
+
+```{r}
+#get the different column names/levels for each question
+defaultQues <- c("Select one")
+ques1 <- factor(unique(levels(dataset$B2BorC)))
+ques2 <- factor(unique(levels(dataset$InOrOut)))
+ques3 <- factor(unique(levels(dataset$StoreVehicleHome)))
+ques4 <- factor(unique(levels(dataset$EmployeeCount)))
+ques5 <- factor(unique(levels(dataset$PartSeasonalOrFullTime)))
+ques6 <- factor(unique(levels(dataset$ProductSalesOrServices)))
+ques7 <- factor(unique(levels(dataset$WorkSchedule)))
+ques8 <- factor(unique(levels(dataset$VeteranFriendly)))
+ques9 <- factor(unique(levels(dataset$ZorProvideLeads)))
+```
+
+
+# Best-Fit-For-Me 
+## 1
+```{r}
+selectInput(
+  inputId = "B2BorC",
+  'What franchise business model are you considering?',
+  c("", as.character(levels(ques1)))
+)
+
+selectInput(inputId = "InOrOut",
+            'Where do you like to operate your franchise?',
+            c("", as.character(levels(ques2)))
+)
+
+selectInput(inputId = "StoreVehicleHome",
+  'Where would customers likely conduct business with you?',
+  c("", as.character(levels(ques3)))
+)
+```
+
+## 2
+
+```{r}
+selectInput(
+  inputId = "EmployeeCount",
+  'How many employees do you like to get started with your franchise?',
+  c("", as.character(levels(ques4)))
+)
+
+selectInput(
+  inputId = "PartSeasonalOrFullTime",
+  'How much time are you planning to dedicate to your franchise?',
+  c("", as.character(levels(ques5)))
+)
+selectInput(
+  inputId = "ProductSalesOrServices",
+  'Which offerings do you like: product sales or services? ',
+  c("", as.character(levels(ques6)))
+  )
+```
+
+## 3
+
+```{r}
+selectInput(
+  inputId = "WorkSchedule",
+  'How many hours per week are you allocating to your franchise?',
+  c("", as.character(levels(ques7)))
+)
+
+selectInput(
+  inputId = "VeteranFriendly",
+  'Will you be interested in veteran-specific franchise programs?',
+  c("", as.character(levels(ques8)))
+)
+
+selectInput(inputId = "ZorProvideLeads",
+            'What is your preference in prospect lead generation?',
+            c("", as.character(levels(ques9)))
+)
+```
+
+
+```{r, results='hide'}
+# Prospect Preference Profile
+df1 <-
+  reactive({
+    data.frame(
+      input$B2BorC,
+      input$InOrOut,
+      input$StoreVehicleHome,
+      input$EmployeeCount,
+      input$PartSeasonalOrFullTime,
+      input$ProductSalesOrServices,
+      input$WorkSchedule,
+      input$VeteranFriendly,
+      input$ZorProvideLeads
+     )  
+  })
+
+df1_new <- reactive({
+  d <- df1() %>% mutate("Company Name" = "Test User", RevGrp = " ",Site_ID = " ")
+  colnames(d) <- c(
+    "B2BorC",
+    "InOrOut",
+    "StoreVehicleHome",
+    "EmployeeCount",
+    "PartSeasonalOrFullTime",
+    "ProductSalesOrServices",
+    "WorkSchedule",
+    "VeteranFriendly",
+    "ZorProvideLeads",
+    "Company Name",
+    "RevGrp",
+    "Site_ID"
+  )
+  d[,c(10, 1:9)] %>% tibble::column_to_rownames(var = "Company Name")
+})
+
+DT::renderDataTable(df1_new())
+```
+
+
+```{r, results='hide'}
+# Profiles of Active Franchises
+## Input Data Table
+
+#Exclude rows with all zeroes, and assign row names
+df2 <- reactive({
+  df_temp <- dataset %>% tibble::column_to_rownames(var = "Company.Name")
+    df_temp[1:205,3:11]
+  })
+
+DT::renderDataTable(df2())
+
+```
+
+
+```{r, results='hide'}
+# Resulting Table
+## Append tables
+df3 <- reactive({
+  test <- rbind(df1_new(), df2())
+  
+})
+DT::renderDataTable(df3())
+```
+
+
+```{r, results='hide'}
+# Resulting Table 2
+df4 <- reactive({
+  testagain <- as.data.frame(mltools::one_hot(as.data.table(df3())))
+  rownames(testagain) <- rownames(df3())
+  testagain
+})
+DT::renderDataTable(df4())
+```
+
+# Plot Similarity/Dissimilarity
+```{r}
+df7 <- reactive({
+  res.mca <- MCA(df3(), graph = FALSE)
+})
+#renderPlot(FactoMineR::plot.MCA(df7()))
+
+renderPlot(
+  factoextra::fviz_mca_ind(
+    df7(),
+    col.ind = "cos2",
+    gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+    repel = FALSE,
+    ggtheme = theme_minimal()
+  )
+)
+
+# renderPlot(factoextra::fviz_cos2(
+#   df7(),
+#   choice = "ind",
+#   axes = 1:2,
+#   top = 20
+# ))
+
+```
+
+# Top Recommendations using Tanimoto output
+```{r}
+#Initialize a similarity/dissimilarity matrix as input Tanimoto similarity calculation
+df5 <- reactive({
+  testboo <- as.matrix(df4())
+  rownames(testboo) <- rownames(df4())
+  colnames(testboo) <- colnames(df4())
+  testboo
+})
+
+df6 <- reactive({
+  testbooboo <- t(df5())
+  colnames(testbooboo) <- rownames(df5())
+  testbooboo <- data.frame(testbooboo)
+  sim.jac2 <- tanimoto(testbooboo)
+  finally <-
+    as.data.frame(sim.jac2) %>% dplyr::select(starts_with("Test.User")) %>% tibble::rownames_to_column() %>% arrange(desc(Test.User)) %>% dplyr::filter(rowname != "Test.User") %>% top_n(25, Test.User)
+  colnames(finally) <- c("Company Name", "Relevance Score (in %)")
+  finally
+})
+DT::renderDataTable(df6())
+
+# Close the app when the session completes
+session$onSessionEnded(function() {
+  stopApp()
+  q("no")
+})
+```
+
