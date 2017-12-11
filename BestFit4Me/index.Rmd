@@ -1,20 +1,25 @@
 ---
-title: "Best-Fit-For-Me Configurator"
+title: "Best-Fit-For-Me"
 output: 
   flexdashboard::flex_dashboard:
-    orientation: columns
+    vertical_layout: fill
     social: menu
     source_code: embed
+    theme: yeti
+    navbar:
+      - { title: "About", href: "https://www.franchisecost.com/", align: right }
 runtime: shiny
 ---
 
+
 ```{r global, include=FALSE}
-# load packages and active client data in 'global' chunk so it can be shared by all users of the dashboard
-packages <- c("dplyr","ggplot2","flexdashboard","data.table","FactoMineR","factoextra", "tibble", "DT", "mltools", "rmarkdown") 
+# load data in 'global' chunk so it can be shared by all users of the dashboard
+packages <- c("dplyr","ggplot2","flexdashboard","data.table","tibble", "DT", "mltools", "rmarkdown") 
 lapply(packages, library, character.only = TRUE)
 rm(packages)
 
-dataset <- read.csv("./data/franchiseProfilesbyGMs.csv", header = TRUE) %>% dplyr::select(-starts_with("X"))
+setwd("/srv/shiny-server/BestFit4Me")
+dataset <- read.csv("./data/franchiseProfilesbyGMsDec5.csv", header = TRUE) %>% dplyr::select(-starts_with("X"))
 
 #define Tanimoto helper function
 tanimoto <- function(x, similarity=F) {
@@ -28,7 +33,6 @@ tanimoto <- function(x, similarity=F) {
 ```
 
 ```{r}
-#get the different column names/levels for each question
 defaultQues <- c("Select one")
 ques1 <- factor(unique(levels(dataset$B2BorC)))
 ques2 <- factor(unique(levels(dataset$InOrOut)))
@@ -41,34 +45,14 @@ ques8 <- factor(unique(levels(dataset$VeteranFriendly)))
 ques9 <- factor(unique(levels(dataset$ZorProvideLeads)))
 ```
 
-
-# Best-Fit-For-Me 
-## 1
+# Personalize Your Franchise Choice
+## Question Set 1
+Top variable contributors to Key Dim 1-2
 ```{r}
 selectInput(
-  inputId = "B2BorC",
-  'What franchise business model are you considering?',
-  c("", as.character(levels(ques1)))
-)
-
-selectInput(inputId = "InOrOut",
-            'Where do you like to operate your franchise?',
-            c("", as.character(levels(ques2)))
-)
-
-selectInput(inputId = "StoreVehicleHome",
-  'Where would customers likely conduct business with you?',
-  c("", as.character(levels(ques3)))
-)
-```
-
-## 2
-
-```{r}
-selectInput(
-  inputId = "EmployeeCount",
-  'How many employees do you like to get started with your franchise?',
-  c("", as.character(levels(ques4)))
+  inputId = "VeteranFriendly",
+  'How important are veteran advantaged franchise programs to you?',
+  c("", as.character(levels(ques8)))
 )
 
 selectInput(
@@ -76,36 +60,71 @@ selectInput(
   'How much time are you planning to dedicate to your franchise?',
   c("", as.character(levels(ques5)))
 )
-selectInput(
-  inputId = "ProductSalesOrServices",
-  'Which offerings do you like: product sales or services? ',
-  c("", as.character(levels(ques6)))
-  )
-```
 
-## 3
 
-```{r}
 selectInput(
   inputId = "WorkSchedule",
-  'How many hours per week are you allocating to your franchise?',
+  'How many hours per week do you want to allocate to your franchise?',
   c("", as.character(levels(ques7)))
+)
+```
+
+## Question Set 2
+Top variable contributors to Key Dim 1-2
+```{r}
+selectInput(
+  inputId = "EmployeeCount",
+  'How large a team do you prefer working with?',
+  c("", as.character(levels(ques4)))
 )
 
 selectInput(
-  inputId = "VeteranFriendly",
-  'Will you be interested in veteran-specific franchise programs?',
-  c("", as.character(levels(ques8)))
-)
+  inputId = "ProductSalesOrServices",
+  'Do you prefer product sales or providing services? ',
+  c("", as.character(levels(ques6)))
+  )
 
 selectInput(inputId = "ZorProvideLeads",
-            'What is your preference in prospect lead generation?',
+            'Do you prefer to generate your own customers or rely on the franchisor?',
             c("", as.character(levels(ques9)))
+)
+```
+
+```{r}
+renderGauge({
+  rate <- df6()$RelevanceScore[1]
+  gauge(rate, min = 0, max = 100, symbol = '%', label = "Your Best Fit Score", gaugeSectors(
+    success = c(50, 100), warning = c(30, 49), danger = c(0, 29)
+  ))
+})
+
+actionButton("clickMe", label = "Click 4 Best Fit", class = "btn btn-lg btn-primary", width = 200, onclick="location.href='#section-visualize-your-results';")
+```
+
+
+## Question Set 3
+Variable non-contributors to Key Dim 1-2
+```{r}
+selectInput(inputId = "StoreVehicleHome",
+  'Where would you prefer to conduct business with customers?',
+  c("", as.character(levels(ques3)))
+)
+
+selectInput(
+  inputId = "B2BorC",
+  'Would you rather serve businesses or consumers?',
+  c("", as.character(levels(ques1)))
+)
+
+selectInput(inputId = "InOrOut",
+            'Would you prefer to be indoors or outdoors?',
+            c("", as.character(levels(ques2)))
 )
 ```
 
 
 ```{r, results='hide'}
+# Display User Data plus List of Active Franchises
 # Prospect Preference Profile
 df1 <-
   reactive({
@@ -123,7 +142,7 @@ df1 <-
   })
 
 df1_new <- reactive({
-  d <- df1() %>% mutate("Company Name" = "Test User", RevGrp = " ",Site_ID = " ")
+  d <- df1() %>% mutate("Company Name" = "TestUser", RevGrp = " ",Site_ID = " ")
   colnames(d) <- c(
     "B2BorC",
     "InOrOut",
@@ -144,7 +163,6 @@ df1_new <- reactive({
 DT::renderDataTable(df1_new())
 ```
 
-
 ```{r, results='hide'}
 # Profiles of Active Franchises
 ## Input Data Table
@@ -152,13 +170,11 @@ DT::renderDataTable(df1_new())
 #Exclude rows with all zeroes, and assign row names
 df2 <- reactive({
   df_temp <- dataset %>% tibble::column_to_rownames(var = "Company.Name")
-    df_temp[1:205,3:11]
+    df_temp[1:382,3:11]
   })
 
 DT::renderDataTable(df2())
-
 ```
-
 
 ```{r, results='hide'}
 # Resulting Table
@@ -170,9 +186,8 @@ df3 <- reactive({
 DT::renderDataTable(df3())
 ```
 
-
 ```{r, results='hide'}
-# Resulting Table 2
+# Resulting Table 2 for One-hot encoding
 df4 <- reactive({
   testagain <- as.data.frame(mltools::one_hot(as.data.table(df3())))
   rownames(testagain) <- rownames(df3())
@@ -181,33 +196,8 @@ df4 <- reactive({
 DT::renderDataTable(df4())
 ```
 
-# Plot Similarity/Dissimilarity
-```{r}
-df7 <- reactive({
-  res.mca <- MCA(df3(), graph = FALSE)
-})
-#renderPlot(FactoMineR::plot.MCA(df7()))
-
-renderPlot(
-  factoextra::fviz_mca_ind(
-    df7(),
-    col.ind = "cos2",
-    gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
-    repel = FALSE,
-    ggtheme = theme_minimal()
-  )
-)
-
-# renderPlot(factoextra::fviz_cos2(
-#   df7(),
-#   choice = "ind",
-#   axes = 1:2,
-#   top = 20
-# ))
-
-```
-
-# Top Recommendations using Tanimoto output
+# Visualize Your Results
+## Top Recomendations 
 ```{r}
 #Initialize a similarity/dissimilarity matrix as input Tanimoto similarity calculation
 df5 <- reactive({
@@ -221,18 +211,40 @@ df6 <- reactive({
   testbooboo <- t(df5())
   colnames(testbooboo) <- rownames(df5())
   testbooboo <- data.frame(testbooboo)
-  sim.jac2 <- tanimoto(testbooboo)
-  finally <-
-    as.data.frame(sim.jac2) %>% dplyr::select(starts_with("Test.User")) %>% tibble::rownames_to_column() %>% arrange(desc(Test.User)) %>% dplyr::filter(rowname != "Test.User") %>% top_n(25, Test.User)
-  colnames(finally) <- c("Company Name", "Relevance Score (in %)")
+  sim.jac2 <- round(tanimoto(testbooboo,T)*100,2)
+  rownames(sim.jac2) <- rownames(df5())
+  colnames(sim.jac2) <- rownames(df5())
+  finally <- as.data.frame(sim.jac2) %>% dplyr::select(starts_with("TestUser")) %>% tibble::rownames_to_column() %>% arrange(desc(TestUser)) %>% dplyr::filter(rowname != "TestUser") %>% top_n(25, TestUser)
+colnames(finally) <- c("CompanyName", "RelevanceScore")
   finally
 })
 DT::renderDataTable(df6())
-
-# Close the app when the session completes
-session$onSessionEnded(function() {
-  stopApp()
-  q("no")
-})
 ```
 
+### Do it Again?
+```{r}
+renderGauge({
+  rate <- df6()$RelevanceScore[1]
+  gauge(rate, min = 0, max = 100, symbol = '%', label = "Your Best Fit Score", gaugeSectors(
+    success = c(50, 100), warning = c(30, 49), danger = c(0, 29)
+  ))
+})
+
+df8 <- reactive({
+  newtest <- df6() %>% mutate(from = "Test User", to = CompanyName, weight = RelevanceScore) %>% dplyr::select(-starts_with("CompanyName"),-starts_with("RelevanceScore"))
+  newtest
+})
+#DT::renderDataTable(df8())
+
+```
+
+
+```{r}
+prnt.test <- function(x){
+   cat(x, sep="\n\n")
+}
+prnt.test(c(" ", " "))
+
+actionButton("clickMe2", label = "Refine Answers", class = "btn btn-lg btn-primary", width = 200,
+             onclick="location.href='#section-personalize-your-franchise-choice';")
+```
